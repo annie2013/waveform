@@ -1,0 +1,189 @@
+<!--
+
+Note that unlike rm's, tac's, and waveforms, cluster plots cannot be toggled off, which makes life a little simpler.
+
+-->
+
+
+<link rel="import" href="bower_components/polymer/polymer.html">
+<link rel="import" href="worker-builder.html">
+<link rel="import" href="managed-canvas.html">
+<link rel="import" href="utils.html">
+<link rel="import" href="palettes.html">
+
+<dom-module id="cluster-plots">
+
+<script is='worker-builder' id="worker" title="cluster-plots" type='javascript/worker'>
+"use strict";
+
+var update_pkeys = function(){
+
+}
+
+</script>
+
+
+<style>
+.sticker{
+display: inline-block;
+line-height: 14px;
+width: 20px;
+height: 17px;
+border: 1px solid #000;
+text-align: center;
+font-size: 10px;
+padding-top: 3px;
+margin: 1px;
+}
+.sticker_list{
+line-height: 19px;
+display: inline;
+font-size: 0px;
+}
+.braket{
+line-height: 19px;
+font-size: 24px;
+vertical-align: top;
+}
+:host{
+padding-left: 2px;
+padding-right: 2px;
+display: flex;
+flex-direction: column;
+height: 100%;
+}
+.bottom{
+flex: 2;
+}
+.active_stickers{
+float: left;
+display: inline-block;
+}
+.others{
+text-align: right;
+display: block;
+}
+</style>
+
+<template>
+    <div class="top">
+        <div class="active_stickers">
+            <div class="sticker_list">
+                <div class="sticker" style$="{{_sticker_style(dest_group)}}" id="painter_dest">[[dest_group]]</div>
+            </div>
+            <paper-tooltip for="painter_dest" position="right">destination group [e]</paper-tooltip>
+            <span class="braket">&#8592;</span>
+            <div class="sticker_list"><span class="braket">{</span>
+                <template is="dom-repeat" items="[[src_groups]]">
+                   <div class="sticker" style$="{{_sticker_style(item)}}">[[item]]</div>
+                </template>
+                <span class="braket">}</span>
+                <paper-tooltip position="right">source groups [e]</paper-tooltip>
+            </div>
+        </div>
+        <div class="sticker_list others">
+            <template is="dom-repeat" items="{{_compute_unused_groups(dest_group, src_groups, groups)}}"> <!-- src_groups.splices, groups, groups.splices -->
+               <div class="sticker" style$="{{_sticker_style(item)}}">[[item]]</div>
+            </template>
+        </div>
+    </div>
+
+    <div class="bottom">
+        <template is="dom-repeat" items="[[cluster_plots]]">
+           <managed-canvas canv_id="[[item.ckey]]"></managed-canvas>
+        </template>
+    </div>
+
+</template>
+
+
+<script>
+    "use strict";
+    Polymer({
+        is:'cluster-plots',
+        properties: {
+            amplitudes: {
+                type: String,
+                notify: true,
+                value: function(){return {};}
+            },
+            cluster_plots: {
+                type: Array,
+                notify: true,
+                value: function(){return [];}
+            },
+            groups: {
+                type: Array,
+                notify: true,
+                value: function(){return [];},
+                observer: '_groups_set'
+            },
+            dest_group: {
+                type: Number,
+                notify: true,
+                value: 1
+            },
+            src_groups: {
+                type: Array,
+                notify: true,
+                value: function(){return [0]}
+            }
+        }, observers: [
+            '_groups_spliced(groups.splices)'
+        ], created: function(){
+            var worker_builder = Polymer.DomModule.import('cluster-plots','#worker');
+            this._worker = worker_builder.create_for(this);
+            this._pkey_generation = 0;
+        }, _groups_set: function(new_val, old_val){
+            this._groups_collection = Array.isArray(new_val) && Polymer.Collection.get(new_val);
+            this._update_okeys(old_val || [], new_val || [], this._pkey_generation, ++this._pkey_generation); // added keys are for a new generation
+        }, _groups_spliced: function(splices){
+            let parsed = Utils.parse_splices(splices);
+            this._update_okeys(parsed.removed, parsed.added, this._pkey_generation, this._pkey_generation);
+        }, _update_okeys: function(okeys_to_remove, okeys_to_add, generation_remove, generation_add){
+            var am = Utils.typed_array_manager;
+            var cm = Utils.canvas_manager;
+
+            var added_arrays = {};
+            var pkeys_to_add = []; 
+            // get clones of new arrays to send to worker
+            for(let okey of okeys_to_add){
+                if(!okey) continue;
+                pkeys_to_add.push(okey._pkey);
+                added_arrays[okey._pkey] = am.get_array_clone(okey.akey);
+            }
+
+            var pkeys_to_remove = [];
+            for(let okey of okeys_to_remove){
+                if(!okey) continue;
+                pkeys_to_remove.push(okey._pkey);
+            }
+
+            // inform worker of the new/deleted arrays
+            this._worker.exec_b('update_pkeys', {
+                add: pkeys_to_add,
+                remove: pkeys_to_remove,
+                generation_remove: generation_remove,
+                generation_add: generation_add
+            }, added_arrays);
+
+        }, _sticker_style: function(group_num){
+            return "background-color:" + Palettes.flag_css[group_num] + "; color:" + Palettes.flag_css_text[group_num] + ";";
+        }, _compute_unused_groups: function(){
+            if(!this.groups){
+                return [];
+            }
+            let others = [];
+            for(let okey of this.groups)if(okey){
+                if(this.src_groups.indexOf(okey.group_num) === -1 &&
+                    this.dest_group !== okey.group_num){
+                    others.push(okey.group_num)
+                }
+            }
+            return others;
+        }
+    });
+</script>
+
+  
+</dom-module>
