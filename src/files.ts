@@ -130,8 +130,13 @@ export async function organiseFiles(
   }
   return { trials, ignored };
 }
-/** Streaming integer parser: bounded scratch space, no per-spike string objects. */
-export async function readCut(file: File, n: number): Promise<Uint16Array> {
+/** Browser I/O bridge: label tokenisation and validation happen inside Rust. */
+export async function readCut(
+  file: File,
+  n: number,
+  wasm: import("./wasm").Core,
+  engine: number,
+): Promise<void> {
   const clu = /\.clu\.\d+$/i.test(file.name);
   let start = 0;
   if (!clu) {
@@ -145,41 +150,31 @@ export async function readCut(file: File, n: number): Promise<Uint16Array> {
       throw new Error(
         `${file.name}: ${m[2]} labels declared, but tetrode has ${n} spikes.`,
       );
-    // One decoded code unit per byte preserves offsets for both UTF-8 and legacy names.
     start = m.index + m[0].length;
   }
-  const out = new Uint16Array(n);
-  let count = 0,
-    value = 0,
-    has = false,
-    skip = clu;
-  const emit = () => {
-    if (!has) return;
-    if (skip) skip = false;
-    else {
-      const c = value - (clu ? 1 : 0);
-      if (c < 0 || c >= 1024)
-        throw new Error("Cell labels must be 0–1023 (CLu is 1-based).");
-      if (count >= n) throw new Error("Cut contains too many labels.");
-      out[count++] = c;
-    }
-    value = 0;
-    has = false;
+  const errors: Record<number, string> = {
+    [-1]: "Invalid character in cut labels.",
+    [-2]: "Cut contains too many labels.",
+    [-3]: "Cell labels must be 0–1023 (CLu is 1-based).",
+    [-4]: "Cut contains too few labels.",
+    [-5]: "Cut label integer overflow.",
   };
-  for (let p = start; p < file.size; p += 1 << 20) {
-    const bytes = new Uint8Array(
-      await file.slice(p, p + (1 << 20)).arrayBuffer(),
-    );
-    for (const b of bytes) {
-      if (b >= 48 && b <= 57) {
-        value = value * 10 + b - 48;
-        has = true;
-      } else if (b === 9 || b === 10 || b === 13 || b === 32) emit();
-      else throw new Error(`Invalid character in ${file.name} labels.`);
+  const chunk = 1 << 20,
+    p = wasm.alloc_bytes(chunk);
+  wasm.engine_cut_begin(engine, clu ? 1 : 0);
+  try {
+    for (let first = start; first < file.size; first += chunk) {
+      const bytes = new Uint8Array(
+        await file.slice(first, first + chunk).arrayBuffer(),
+      );
+      new Uint8Array(wasm.memory.buffer, p, bytes.length).set(bytes);
+      const status = wasm.engine_cut_feed(engine, p, bytes.length);
+      if (status) throw new Error(`${file.name}: ${errors[status]}`);
     }
+    const status = wasm.engine_cut_finish(engine);
+    if (status) throw new Error(`${file.name}: ${errors[status]}`);
+  } finally {
+    wasm.engine_cut_abort(engine);
+    wasm.free_bytes(p, chunk);
   }
-  emit();
-  if (count !== n)
-    throw new Error(`${file.name}: expected ${n} labels, found ${count}.`);
-  return out;
 }

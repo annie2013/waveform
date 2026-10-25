@@ -364,10 +364,12 @@ export function AnalysisPlot({
   data,
   mode,
   maxRate,
+  compact = false,
 }: {
   data: AnalysisData;
   mode: PlotMode | "path";
   maxRate: number;
+  compact?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -380,7 +382,7 @@ export function AnalysisPlot({
         ctx.scale(dpr, dpr);
         const w = c.clientWidth,
           h = c.clientHeight;
-        ctx.fillStyle = "#0a0e12";
+        ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, w, h);
         if (mode === "spatial") {
           const scale = maxRate || data.peak || 1,
@@ -389,8 +391,8 @@ export function AnalysisPlot({
           for (let i = 0; i < data.spatial.length; i++) {
             const v = data.spatial[i];
             ctx.fillStyle = Number.isFinite(v)
-              ? `hsl(${230 - Math.min(1, v / scale) * 220} 75% ${12 + Math.min(1, v / scale) * 47}%)`
-              : "#111923";
+              ? `hsl(${240 - Math.min(1, v / scale) * 240} 100% 50%)`
+              : "#ffffff";
             ctx.fillRect(
               (i % data.width) * ww,
               Math.floor(i / data.width) * hh,
@@ -399,7 +401,7 @@ export function AnalysisPlot({
             );
           }
         } else if (mode === "path") {
-          ctx.strokeStyle = "#34464e";
+          ctx.strokeStyle = "#333333";
           ctx.lineWidth = 0.6;
           ctx.beginPath();
           for (let i = 0; i < data.path.length; i += 2) {
@@ -409,7 +411,7 @@ export function AnalysisPlot({
             else ctx.moveTo(x, y);
           }
           ctx.stroke();
-          ctx.fillStyle = "#7cdec3";
+          ctx.fillStyle = "#0044cc";
           for (let i = 0; i < data.spikes.length; i += 2)
             ctx.fillRect(data.spikes[i] * w, data.spikes[i + 1] * h, 1.6, 1.6);
         } else if (mode === "direction") {
@@ -418,14 +420,14 @@ export function AnalysisPlot({
             r = Math.min(w, h) * 0.4,
             cx = w / 2,
             cy = h / 2;
-          ctx.strokeStyle = "#263641";
+          ctx.strokeStyle = "#dddddd";
           for (const k of [0.5, 1]) {
             ctx.beginPath();
             ctx.arc(cx, cy, r * k, 0, Math.PI * 2);
             ctx.stroke();
           }
-          ctx.strokeStyle = "#77dac0";
-          ctx.fillStyle = "#77dac024";
+          ctx.strokeStyle = "#111111";
+          ctx.fillStyle = "transparent";
           ctx.beginPath();
           for (let i = 0; i <= a.length; i++) {
             const j = i % a.length,
@@ -439,22 +441,49 @@ export function AnalysisPlot({
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
+        } else if (compact) {
+          const a = mode === "ac" ? data.ac : data.speed,
+            max = Math.max(...a, 1);
+          if (mode === "ac") {
+            ctx.strokeStyle = "#f00000";
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            for (let i = 0; i < a.length; i++) {
+              const x = (i / (a.length - 1)) * (w - 2) + 1,
+                y = h - 2 - (a[i] / max) * (h - 4);
+              if (!i) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = "#111";
+            const bh = h / a.length;
+            for (let i = 0; i < a.length; i++) {
+              const bw = (a[i] / max) * (w - 1);
+              ctx.fillRect(
+                w - bw,
+                i * bh,
+                Math.max(0.5, bw),
+                Math.max(0.5, bh - 0.4),
+              );
+            }
+          }
         } else {
           const a = mode === "ac" ? data.ac : data.speed,
             max = Math.max(...a, 1),
             bw = (w - 36) / a.length;
-          ctx.strokeStyle = "#24333e";
+          ctx.strokeStyle = "#888";
           ctx.beginPath();
           ctx.moveTo(28, 10);
           ctx.lineTo(28, h - 23);
           ctx.lineTo(w - 6, h - 23);
           ctx.stroke();
-          ctx.fillStyle = "#7cdec3";
+          ctx.fillStyle = "#0044cc";
           for (let i = 0; i < a.length; i++) {
             const v = (a[i] / max) * (h - 40);
             ctx.fillRect(29 + i * bw, h - 24 - v, Math.max(1, bw - 1), v);
           }
-          ctx.fillStyle = "#70828f";
+          ctx.fillStyle = "#555";
           ctx.font = "10px monospace";
           ctx.fillText("0", 25, h - 7);
           ctx.fillText(
@@ -468,7 +497,7 @@ export function AnalysisPlot({
     const ro = new ResizeObserver(draw);
     ro.observe(c);
     return () => ro.disconnect();
-  }, [data, mode, maxRate]);
+  }, [data, mode, maxRate, compact]);
   return (
     <canvas
       ref={canvas}

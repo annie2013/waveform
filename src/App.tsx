@@ -1,48 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Activity,
-  ArrowDownToLine,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ChevronsLeft,
-  Database,
-  Folder,
-  FolderOpen,
-  History,
-  Keyboard,
-  Layers,
-  LoaderCircle,
-  MousePointer2,
-  PenLine,
-  Plus,
-  Redo2,
-  Search,
-  Settings2,
-  ShieldCheck,
-  SlidersHorizontal,
-  Undo2,
-  Upload,
-  Activity as Waveform,
-  X,
-  Scissors,
-  GitMerge,
-  ArrowLeftRight,
-  ImageDown,
-  Copy,
-  Pin,
-} from "lucide-react";
+import { Check, History, Redo2, Search, Undo2, X } from "lucide-react";
+import { DesktopShell } from "./DesktopShell";
+import { captureTile, type VisiblePlots } from "./TileWall";
 import { organiseFiles } from "./files";
 import { request } from "./client";
 import { demoFiles } from "./demo";
-import {
-  Clusters,
-  WavePlot,
-  WaveformGate,
-  AnalysisPlot,
-  CellOverview,
-} from "./plots";
 import {
   color,
   fileId,
@@ -95,7 +57,13 @@ export default function App() {
     [tool, setTool] = useState("select"),
     [isolate, setIsolate] = useState(false),
     [range, setRange] = useState([0, 1]),
-    [mode, setMode] = useState<PlotMode>("waveforms");
+    [shown, setShown] = useState<VisiblePlots>({
+      waveforms: true,
+      spatial: true,
+      direction: true,
+      speed: true,
+      ac: true,
+    });
   const [pane, setPane] = useState<Pane>(null),
     [filter, setFilter] = useState(""),
     [sort, setSort] = useState(false),
@@ -106,7 +74,6 @@ export default function App() {
     [notice, setNotice] = useState(""),
     [drag, setDrag] = useState(false),
     [demo, setDemo] = useState(false),
-    [sidebar, setSidebar] = useState(true),
     [pins, setPins] = useState<{ id: string; title: string; image: string }[]>(
       [],
     );
@@ -339,34 +306,11 @@ export default function App() {
     setCell(c);
     setSources([c]);
   };
-  const snapshot = () => {
-    const source = document.querySelector<HTMLCanvasElement>(
-      ".detail-main canvas",
+  const snapshot = () =>
+    captureTile(
+      cell,
+      `${trial?.name} · T${tetNum} · cell ${cell} · ${fmt(data?.counts[cell] || 0)} spikes`,
     );
-    if (!source) return;
-    const c = document.createElement("canvas");
-    c.width = source.width;
-    c.height = source.height + 50;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#10171f";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = "#b3dfcb";
-    ctx.font = "12px monospace";
-    ctx.fillText(
-      `${trial?.name} · T${tetNum} · cell ${cell} · ${mode}`,
-      12,
-      21,
-    );
-    ctx.fillStyle = "#8098a8";
-    ctx.font = "10px monospace";
-    ctx.fillText(
-      `${fmt(data?.counts[cell] || 0)} spikes · ${mode === "waveforms" ? "sampled waveforms" : "all-population analysis"}`,
-      12,
-      39,
-    );
-    ctx.drawImage(source, 0, 50);
-    return c;
-  };
   const pin = () => {
     const c = snapshot();
     if (c)
@@ -390,7 +334,7 @@ export default function App() {
         ]);
         setNotice("Cell plot copied to clipboard.");
       } catch {
-        download(b, `cell-${cell}-${mode}.png`);
+        download(b, `cell-${cell}.png`);
         setNotice("Clipboard unavailable; the plot was downloaded.");
       }
     });
@@ -475,7 +419,8 @@ export default function App() {
         v: "speed",
         t: "ac",
       };
-      if (modes[e.key]) setMode(modes[e.key]);
+      if (modes[e.key])
+        setShown((s) => ({ ...s, [modes[e.key]]: !s[modes[e.key]] }));
       if (trial && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         const i = trials.indexOf(trial) + (e.key === "ArrowLeft" ? -1 : 1);
         if (trials[i]) chooseTrial(trials[i]);
@@ -484,11 +429,6 @@ export default function App() {
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
   });
-  const cells = data
-    ? Array.from(data.counts, (n, i) => ({ n, i }))
-        .filter((c) => c.n > 0 && String(c.i).includes(filter))
-        .sort((a, b) => (sort ? b.n - a.n : a.i - b.i))
-    : [];
   const startDemo = async () => {
     setDemo(true);
     setMessage("Creating synthetic demo…");
@@ -571,7 +511,7 @@ export default function App() {
         onChange={(v) => update("drift", v)}
       />
       <Toggle
-        label="Additive density rendering"
+        label="Density rendering"
         checked={settings.density}
         onChange={(v) => update("density", v)}
       />
@@ -687,880 +627,75 @@ export default function App() {
     </>
   );
   return (
-    <div
-      className="app"
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (e.dataTransfer.types.includes("Files")) setDrag(true);
+    <DesktopShell
+      trials={trials}
+      trial={trial}
+      tetNum={tetNum}
+      cutId={cutId}
+      data={data}
+      analysis={analysis}
+      settings={settings}
+      cell={cell}
+      sources={sources}
+      dest={dest}
+      tool={tool}
+      isolate={isolate}
+      range={range}
+      shown={shown}
+      busy={busy}
+      progress={progress}
+      message={message}
+      error={error}
+      notice={notice}
+      drag={drag}
+      filter={filter}
+      sort={sort}
+      fileInput={fileInput}
+      folderInput={folderInput}
+      pins={pins}
+      onImport={importFiles}
+      onTrial={chooseTrial}
+      onTet={chooseTet}
+      onRecording={(t, n, c) => {
+        const target = t.tetrodes.find((e) => e.number === n && e.file);
+        if (!target) return;
+        if (tet) lastCuts.current.set(tet.id, cutId);
+        setTrialId(t.id);
+        setTetNum(n);
+        setCutId(
+          c ?? lastCuts.current.get(target.id) ?? target.cuts[0]?.id ?? "",
+        );
       }}
-      onDragLeave={(e) => {
-        if (!e.relatedTarget) setDrag(false);
-      }}
+      onCut={setCutId}
+      onCell={selectCell}
+      onSources={setSources}
+      onDest={setDest}
+      onTool={setTool}
+      onIsolate={setIsolate}
+      onRange={setRange}
+      onToggle={(m) => setShown((s) => ({ ...s, [m]: !s[m] }))}
+      onPanel={setPane}
+      onOperation={operation}
+      onEdit={edit}
+      onPolygon={polygon}
+      onExport={() => exportCut()}
+      onSettings={update}
+      onDemo={startDemo}
+      onFilter={setFilter}
+      onSort={() => setSort(!sort)}
+      onError={() => setError("")}
+      onNotice={() => setNotice("")}
+      onDrag={setDrag}
       onDrop={drop}
+      onPin={pin}
+      onCopy={copyPlot}
+      onImage={() =>
+        snapshot()?.toBlob((b) => {
+          if (b) download(b, `cell-${cell}.png`);
+        })
+      }
+      onUnpin={(id) => setPins((p) => p.filter((x) => x.id !== id))}
     >
-      <input
-        ref={fileInput}
-        type="file"
-        aria-label="Import recording files"
-        multiple
-        hidden
-        onChange={(e) => {
-          if (e.target.files) importFiles(Array.from(e.target.files));
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={folderInput}
-        type="file"
-        aria-label="Import recording folder"
-        multiple
-        hidden
-        {...({ webkitdirectory: "" } as any)}
-        onChange={(e) => {
-          if (e.target.files) importFiles(Array.from(e.target.files));
-          e.target.value = "";
-        }}
-      />
-      <header className="app-header">
-        <a className="brand" href="./">
-          <span className="brand-mark">
-            <Waveform size={23} />
-          </span>
-          waveform<span className="version">2.0</span>
-        </a>
-        <span className="header-divider" />
-        <span className="workspace-name">Spike sorting workspace</span>
-        <div className="header-right">
-          <span className="local-badge">
-            <span /> Local files only
-          </span>
-          <button
-            className="icon"
-            title="Keyboard shortcuts"
-            aria-label="Keyboard shortcuts"
-            onClick={() => setPane("help")}
-          >
-            <Keyboard size={17} />
-          </button>
-          <button
-            className="icon"
-            title="Settings"
-            aria-label="Settings"
-            onClick={() => setPane("settings")}
-          >
-            <Settings2 size={18} />
-          </button>
-          <a
-            className="repo-link"
-            href="https://github.com/d1manson/waveform"
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub ↗
-          </a>
-        </div>
-      </header>
-      <div className={`workspace ${sidebar ? "" : "collapsed"}`}>
-        <aside className="sidebar">
-          <div className="sidebar-title">
-            <span>RECORDINGS</span>
-            <button
-              className="icon"
-              aria-label="Import files"
-              onClick={() => fileInput.current?.click()}
-            >
-              <Plus size={17} />
-            </button>
-          </div>
-          <button
-            className="import-button"
-            onClick={() => fileInput.current?.click()}
-          >
-            <Upload size={15} /> Import files <span>⌘ O</span>
-          </button>
-          <button
-            className="folder-import"
-            onClick={() => folderInput.current?.click()}
-          >
-            <FolderOpen size={13} /> Open a folder
-          </button>
-          <div className="recording-list">
-            {trials.length ? (
-              trials.map((t) => (
-                <div
-                  className={`trial ${t.id === trialId ? "active" : ""}`}
-                  key={t.id}
-                >
-                  <button
-                    className="trial-name"
-                    title={t.folder || t.name}
-                    onClick={() => chooseTrial(t)}
-                  >
-                    {t.id === trialId ? (
-                      <ChevronDown size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
-                    <Folder size={15} />
-                    <span>{t.name}</span>
-                    <small>{t.tetrodes.length}</small>
-                  </button>
-                  {t.id === trialId && (
-                    <div className="trial-details">
-                      <div className="trial-files">
-                        <span className={t.set ? "available" : ""}>.set</span>
-                        <span className={t.pos ? "available" : ""}>.pos</span>
-                        <span>
-                          {t.tetrodes.filter((t) => t.file).length} tetrodes
-                        </span>
-                      </div>
-                      <div className="section-label">TETRODES</div>
-                      <div className="tet-grid">
-                        {t.tetrodes.map((e) => (
-                          <button
-                            key={e.id}
-                            disabled={!e.file}
-                            className={e.number === tetNum ? "selected" : ""}
-                            onClick={() => chooseTet(e.number)}
-                            title={e.file?.name || "Tetrode missing"}
-                          >
-                            {String(e.number).padStart(2, "0")}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="section-label cuts-label">
-                        CUT FILES <Layers size={11} />
-                      </div>
-                      <button
-                        className={`cut-item ${!cutId ? "selected" : ""}`}
-                        onClick={() => setCutId("")}
-                      >
-                        <span className="cut-dot" />
-                        Unsorted <small>all spikes</small>
-                      </button>
-                      {tet?.cuts.map((c) => (
-                        <button
-                          key={c.id}
-                          className={`cut-item ${cutId === c.id ? "selected" : ""}`}
-                          onClick={() => setCutId(c.id)}
-                          title={c.name}
-                        >
-                          <span className="cut-dot" />
-                          <span>{c.name.replace(t.name, "~")}</span>
-                        </button>
-                      ))}
-                      {data?.dirty && (
-                        <div className="edited-label">
-                          <PenLine size={11} /> Edited cut · undo preserved
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="sidebar-empty">
-                <FolderOpen size={27} />
-                <p>
-                  Your recordings
-                  <br />
-                  will appear here.
-                </p>
-                <span>.set · .pos · .1–.N · .cut · .clu.N</span>
-              </div>
-            )}
-          </div>
-          <div className="sidebar-bottom">
-            <ShieldCheck size={15} />
-            <div>
-              Private by design<small>Files stay on this device</small>
-            </div>
-          </div>
-        </aside>
-        <main>
-          {error && (
-            <div className="alert error" role="alert">
-              {error}
-              <button aria-label="Dismiss error" onClick={() => setError("")}>
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {notice && (
-            <div className="alert" role="status">
-              {notice}
-              <button
-                aria-label="Dismiss notification"
-                onClick={() => setNotice("")}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {!data && !busy ? (
-            <div className="welcome">
-              <div className="welcome-kicker">
-                <span /> A CLEARER VIEW OF YOUR RECORDINGS
-              </div>
-              <h1>
-                From spikes to
-                <br />
-                <em>something meaningful.</em>
-              </h1>
-              <p>
-                Explore tetrodes, compare cells, and refine your cuts.
-                <br />A fast, private workspace for your neural recordings.
-              </p>
-              <div
-                className="drop-card"
-                onClick={() => fileInput.current?.click()}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") fileInput.current?.click();
-                }}
-              >
-                <div className="drop-icon">
-                  <Upload size={26} />
-                </div>
-                <h2>Drop your recording files here</h2>
-                <p>
-                  Choose a selection of trials, tetrodes and cut files.
-                  <br />
-                  We’ll organise everything for you.
-                </p>
-                <button
-                  className="primary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInput.current?.click();
-                  }}
-                >
-                  <FolderOpen size={15} /> Browse files
-                </button>
-                <span className="formats">
-                  LTX .SET, .POS, .1–.N, .CUT, .CLU.N
-                </span>
-              </div>
-              <div className="demo-prompt">
-                Just looking around?{" "}
-                <button onClick={startDemo}>
-                  Explore a synthetic demo <ArrowRight size={13} />
-                </button>
-              </div>
-              <div className="welcome-features">
-                <span>
-                  <Database size={15} /> Chunked large-file loading
-                </span>
-                <span>
-                  <Activity size={15} /> WebGL2 rendering
-                </span>
-                <span>
-                  <History size={15} /> Full cut undo & redo
-                </span>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="view-heading">
-                <div>
-                  <div className="breadcrumbs">
-                    <button
-                      className="icon"
-                      aria-label="Toggle recordings sidebar"
-                      onClick={() => setSidebar(!sidebar)}
-                    >
-                      <ChevronsLeft size={15} />
-                    </button>
-                    Recordings <ChevronRight size={12} /> {trial?.name}{" "}
-                    <ChevronRight size={12} />
-                    <span>Tetrode {String(tetNum).padStart(2, "0")}</span>
-                    {demo && <b className="demo-badge">SYNTHETIC DEMO</b>}
-                  </div>
-                  <h1>
-                    Tetrode {String(tetNum).padStart(2, "0")}
-                    <span className="subdued">/</span>
-                    <span className="trial-caption">{trial?.name}</span>
-                  </h1>
-                </div>
-                <div className="view-actions">
-                  <button
-                    className="secondary"
-                    aria-label="Edit history"
-                    onClick={() => setPane("history")}
-                  >
-                    <History size={15} /> History
-                    {data?.undo.length ? (
-                      <span className="count-badge">{data.undo.length}</span>
-                    ) : null}
-                  </button>
-                  <button
-                    className="primary"
-                    disabled={!ready}
-                    onClick={() => exportCut()}
-                  >
-                    <ArrowDownToLine size={15} /> Export cut
-                  </button>
-                </div>
-              </div>
-              <div className="stats-row">
-                <Stat label="SPIKES" value={data ? fmt(data.n) : "—"} />
-                <Stat
-                  label="CELLS"
-                  value={
-                    data
-                      ? String(
-                          data.counts.filter((n, i) => i > 0 && n > 0).length,
-                        )
-                      : "—"
-                  }
-                />
-                <Stat
-                  label="DURATION"
-                  value={data ? time(data.duration) : "—"}
-                />
-                <Stat
-                  label="CUT"
-                  value={
-                    cut ? cut.name.replace(trial?.name || "", "~") : "Unsorted"
-                  }
-                  extra={
-                    data?.dirty ? "Modified" : cut ? "Imported" : "No cut file"
-                  }
-                />
-                <div className="cache-stat">
-                  <span className="status-dot" />
-                  {data?.cached ? "Cached & ready" : "Rust / Wasm engine"}
-                  <small>
-                    {data
-                      ? `${(data.residentBytes / 1048576).toFixed(0)} MB resident`
-                      : "Preparing recording"}
-                  </small>
-                </div>
-              </div>
-              <div className="editor-body">
-                <section className="plots-column">
-                  <div className="panel cluster-panel">
-                    <div className="panel-heading">
-                      <div>
-                        <span className="panel-dot" />
-                        Feature space
-                        <span className="panel-subtitle">
-                          Peak-to-peak amplitude
-                        </span>
-                      </div>
-                      <div className="panel-controls">
-                        <button
-                          className={settings.drift ? "active" : ""}
-                          onClick={() => update("drift", !settings.drift)}
-                        >
-                          Drift
-                        </button>
-                        <button
-                          className={settings.density ? "active" : ""}
-                          onClick={() => update("density", !settings.density)}
-                        >
-                          Density
-                        </button>
-                        <button
-                          className="icon"
-                          aria-label="Plot settings"
-                          onClick={() => setPane("settings")}
-                        >
-                          <SlidersHorizontal size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="plot-toolbar">
-                      <div className="segmented">
-                        <button
-                          className={tool === "select" ? "active" : ""}
-                          title="Select"
-                          onClick={() => setTool("select")}
-                        >
-                          <MousePointer2 size={14} />
-                        </button>
-                        <button
-                          className={tool === "lasso" ? "active" : ""}
-                          title="Lasso cut [L]"
-                          aria-label="Lasso cut"
-                          onClick={() => setTool("lasso")}
-                        >
-                          <Scissors size={14} /> Lasso
-                        </button>
-                        <button
-                          className={tool === "brush" ? "active" : ""}
-                          title="Paint source spikes"
-                          onClick={() => setTool("brush")}
-                        >
-                          <PenLine size={14} />
-                        </button>
-                      </div>
-                      <span className="toolbar-hint">
-                        {tool === "select"
-                          ? "Choose a cell to inspect"
-                          : `Draw to move source spikes → cell ${dest}`}
-                      </span>
-                      <button
-                        className="icon"
-                        aria-label="Undo"
-                        title="Undo [⌘Z]"
-                        disabled={!ready || !data?.undo.length}
-                        onClick={() => operation("undo")}
-                      >
-                        <Undo2 size={15} />
-                      </button>
-                      <button
-                        className="icon"
-                        aria-label="Redo"
-                        title="Redo [⌘⇧Z]"
-                        disabled={!ready || !data?.redo.length}
-                        onClick={() => operation("redo")}
-                      >
-                        <Redo2 size={15} />
-                      </button>
-                    </div>
-                    {data && (
-                      <Clusters
-                        data={data}
-                        settings={settings}
-                        selected={cell}
-                        isolate={isolate}
-                        range={range}
-                        tool={ready ? tool : "select"}
-                        onPolygon={polygon}
-                      />
-                    )}
-                    <div className="plot-footer">
-                      <span>
-                        <span className="status-dot" />
-                        {data
-                          ? compact(Math.min(data.n, settings.budget))
-                          : "—"}{" "}
-                        displayed / {data ? compact(data.n) : "—"} spikes
-                        <span className="footer-note">
-                          {" "}
-                          · cuts use all spikes
-                        </span>
-                      </span>
-                      <span>
-                        WebGL2 <span className="dot-separator">·</span> 6
-                        projections
-                      </span>
-                    </div>
-                  </div>
-                  <div className="time-filter">
-                    <span>TIME WINDOW</span>
-                    <label>
-                      Start
-                      <input
-                        aria-label="Time window start"
-                        type="range"
-                        min="0"
-                        max="1"
-                        step=".001"
-                        value={range[0]}
-                        onChange={(e) =>
-                          setRange([
-                            Math.min(+e.target.value, range[1]),
-                            range[1],
-                          ])
-                        }
-                      />
-                    </label>
-                    <label>
-                      End
-                      <input
-                        aria-label="Time window end"
-                        type="range"
-                        min="0"
-                        max="1"
-                        step=".001"
-                        value={range[1]}
-                        onChange={(e) =>
-                          setRange([
-                            range[0],
-                            Math.max(+e.target.value, range[0]),
-                          ])
-                        }
-                      />
-                    </label>
-                    <b>
-                      {time((data?.duration || 0) * range[0])} —{" "}
-                      {time((data?.duration || 0) * range[1])}
-                    </b>
-                    <button onClick={() => setRange([0, 1])}>Reset</button>
-                  </div>
-                  {data && (
-                    <CellOverview
-                      data={data}
-                      selected={cell}
-                      onSelect={selectCell}
-                    />
-                  )}
-                  <div className="panel details-panel">
-                    <div className="panel-heading">
-                      <div>
-                        Cell{" "}
-                        <span
-                          className="cell-number"
-                          style={{ color: color(cell) }}
-                        >
-                          {String(cell).padStart(2, "0")}
-                        </span>
-                        <span className="panel-subtitle">
-                          {data ? fmt(data.counts[cell] || 0) : "—"} spikes
-                        </span>
-                      </div>
-                      <div className="snapshot-controls">
-                        <button
-                          className="icon"
-                          aria-label="Pin cell snapshot"
-                          title="Pin cell for comparison"
-                          disabled={!ready}
-                          onClick={pin}
-                        >
-                          <Pin size={14} />
-                        </button>
-                        <button
-                          className="icon"
-                          aria-label="Copy cell plot"
-                          title="Copy plot to clipboard"
-                          disabled={!ready}
-                          onClick={copyPlot}
-                        >
-                          <Copy size={14} />
-                        </button>
-                        <button
-                          className="icon"
-                          aria-label="Export plot image"
-                          onClick={() => {
-                            const c = snapshot();
-                            c?.toBlob((b) => {
-                              if (b) download(b, `cell-${cell}-${mode}.png`);
-                            });
-                          }}
-                        >
-                          <ImageDown size={15} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="detail-tabs">
-                      {(
-                        [
-                          "waveforms",
-                          "spatial",
-                          "direction",
-                          "speed",
-                          "ac",
-                        ] as PlotMode[]
-                      ).map((m) => (
-                        <button
-                          key={m}
-                          className={mode === m ? "active" : ""}
-                          onClick={() => setMode(m)}
-                        >
-                          {
-                            {
-                              waveforms: "Waveforms",
-                              spatial: "Spatial rate",
-                              direction: "Head direction",
-                              speed: "Speed",
-                              ac: "Autocorrelation",
-                            }[m]
-                          }
-                        </button>
-                      ))}
-                    </div>
-                    <div className="detail-content">
-                      <div className="detail-main">
-                        {data && mode === "waveforms" ? (
-                          <>
-                            <WavePlot data={data} cell={cell} />
-                            <WaveformGate
-                              disabled={!ready || !sources.length}
-                              onGate={(channel, sample, threshold, above) =>
-                                operation("edit", {
-                                  action: "gate",
-                                  sources,
-                                  dest,
-                                  channel,
-                                  sample,
-                                  threshold,
-                                  above,
-                                  description: `Waveform Ch ${channel + 1} sample ${sample} ${above ? "≥" : "<"} ${threshold} → ${dest}`,
-                                })
-                              }
-                            />
-                          </>
-                        ) : analysis && (trial?.pos || mode === "ac") ? (
-                          <AnalysisPlot
-                            data={analysis}
-                            mode={mode}
-                            maxRate={settings.maxRate}
-                          />
-                        ) : (
-                          <div className="analysis-empty">
-                            {analysis
-                              ? "Add a matching .pos file for position analysis."
-                              : "Computing analysis…"}
-                          </div>
-                        )}
-                      </div>
-                      <div className="detail-metrics">
-                        <Stat
-                          label="MEAN RATE"
-                          value={
-                            analysis ? `${analysis.rate.toFixed(2)} Hz` : "—"
-                          }
-                        />
-                        <Stat
-                          label="REFRACTORY < 2 ms"
-                          value={
-                            analysis
-                              ? `${analysis.refractory.toFixed(2)}%`
-                              : "—"
-                          }
-                        />
-                        <Stat
-                          label="SPATIAL PEAK"
-                          value={
-                            analysis && trial?.pos
-                              ? `${analysis.peak.toFixed(2)} Hz`
-                              : "—"
-                          }
-                        />
-                        {mode === "ac" && analysis?.sampledPairs && (
-                          <small>
-                            Autocorrelation uses sampled reference spikes.
-                          </small>
-                        )}
-                        {mode === "waveforms" && (
-                          <small>
-                            Waveforms use a stratified sample. Cut labels use
-                            every spike.
-                          </small>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {pins.length > 0 && (
-                    <div className="pinned-plots">
-                      {pins.map((p) => (
-                        <div className="panel" key={p.id}>
-                          <div className="panel-heading">
-                            <span>{p.title}</span>
-                            <button
-                              className="icon"
-                              aria-label={`Remove pinned ${p.title}`}
-                              onClick={() =>
-                                setPins((ps) => ps.filter((x) => x.id !== p.id))
-                              }
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                          <img alt={p.title} src={p.image} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {analysis && trial?.pos && (
-                    <div className="mini-plots">
-                      <div className="panel">
-                        <div className="panel-heading">
-                          Path & spikes <small>Cell {cell}</small>
-                        </div>
-                        <AnalysisPlot data={analysis} mode="path" maxRate={0} />
-                      </div>
-                      <div className="panel">
-                        <div className="panel-heading">
-                          Spatial rate{" "}
-                          <small>{analysis.peak.toFixed(1)} Hz peak</small>
-                        </div>
-                        <AnalysisPlot
-                          data={analysis}
-                          mode="spatial"
-                          maxRate={settings.maxRate}
-                        />
-                      </div>
-                      <div className="panel">
-                        <div className="panel-heading">
-                          Autocorrelation{" "}
-                          <small>
-                            {settings.acWindow} ms
-                            {analysis.sampledPairs ? " · sampled" : ""}
-                          </small>
-                        </div>
-                        <AnalysisPlot data={analysis} mode="ac" maxRate={0} />
-                      </div>
-                    </div>
-                  )}
-                </section>
-                <aside className="cells-panel panel">
-                  <div className="panel-heading">
-                    <span>
-                      Cells{" "}
-                      <b className="count-badge">
-                        {data ? data.counts.filter((c) => c > 0).length : 0}
-                      </b>
-                    </span>
-                    <button
-                      className="icon"
-                      title="Sort by spike count"
-                      aria-label="Sort cells by count"
-                      onClick={() => setSort(!sort)}
-                    >
-                      <ArrowDownToLine size={14} />
-                    </button>
-                  </div>
-                  <div className="cell-search">
-                    <Search size={13} />
-                    <input
-                      aria-label="Find cell"
-                      placeholder="Find a cell…"
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                    />
-                  </div>
-                  <div className="cell-list-header">
-                    <span>SOURCE / CELL</span>
-                    <span>SPIKES</span>
-                  </div>
-                  <div className="cell-list">
-                    {cells.map((c) => (
-                      <div
-                        key={c.i}
-                        className={`cell-row ${cell === c.i ? "selected" : ""}`}
-                      >
-                        <input
-                          aria-label={`Cell ${c.i} source`}
-                          type="checkbox"
-                          checked={sources.includes(c.i)}
-                          onChange={(e) =>
-                            setSources(
-                              e.target.checked
-                                ? [...sources, c.i]
-                                : sources.filter((i) => i !== c.i),
-                            )
-                          }
-                        />
-                        <button
-                          onClick={() => selectCell(c.i)}
-                          aria-label={`Select cell ${c.i}`}
-                        >
-                          <span
-                            className="cell-color"
-                            style={{ background: color(c.i) }}
-                          />
-                          <b>
-                            {c.i === 0
-                              ? "0 · Noise"
-                              : String(c.i).padStart(2, "0")}
-                          </b>
-                          <span>{compact(c.n)}</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="cell-controls">
-                    <Toggle
-                      label="Isolate selected cell"
-                      checked={isolate}
-                      onChange={setIsolate}
-                    />
-                    <div className="cut-destination">
-                      <label htmlFor="destination">Destination cell</label>
-                      <input
-                        id="destination"
-                        aria-label="Destination cell"
-                        type="number"
-                        min="0"
-                        max="1023"
-                        value={dest}
-                        onChange={(e) =>
-                          setDest(Math.max(0, Math.min(1023, +e.target.value)))
-                        }
-                      />
-                      <button
-                        title="Next empty cell"
-                        aria-label="Next empty cell"
-                        onClick={() =>
-                          setDest(
-                            data?.counts.findIndex(
-                              (n, i) => i > 0 && n === 0,
-                            ) || 1,
-                          )
-                        }
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                    <div className="edit-buttons">
-                      <button
-                        disabled={!ready || cell === dest}
-                        onClick={() => edit("merge")}
-                      >
-                        <GitMerge size={14} /> Merge
-                      </button>
-                      <button
-                        disabled={!ready || cell === dest}
-                        onClick={() => edit("swap")}
-                      >
-                        <ArrowLeftRight size={14} /> Swap
-                      </button>
-                    </div>
-                    <p>
-                      Select source cells, set a destination, then draw a lasso
-                      to split or reassign spikes.
-                    </p>
-                    <button
-                      className="history-link"
-                      onClick={() => setPane("history")}
-                    >
-                      <History size={13} /> View edit history{" "}
-                      <ChevronRight size={12} />
-                    </button>
-                  </div>
-                </aside>
-              </div>
-            </>
-          )}
-          {busy && (
-            <div
-              className={`loading-bar ${data ? "inline" : "initial"}`}
-              role="status"
-            >
-              <LoaderCircle size={17} className="spin" />
-              <span>{message}</span>
-              <progress max="1" value={progress} />
-            </div>
-          )}
-        </main>
-      </div>
-      <footer className="app-footer">
-        <span>
-          <span className="status-dot" />{" "}
-          {busy ? "Processing" : data ? "Ready" : "Ready to explore"}
-          <span className="dot-separator">·</span>All processing on your device
-        </span>
-        <span>
-          Rust + WebAssembly <span className="dot-separator">/</span> React{" "}
-          <span className="dot-separator">/</span> WebGL2{" "}
-          <button onClick={() => setPane("help")}>
-            <Keyboard size={12} /> Shortcuts
-          </button>
-        </span>
-      </footer>
-      {drag && (
-        <div className="drag-overlay">
-          <Upload size={40} />
-          <h2>Drop files to add your recordings</h2>
-          <p>
-            Trials, tetrodes, position data and cuts are matched automatically.
-          </p>
-        </div>
-      )}
       {pane && (
         <div className="pane-backdrop" onClick={() => setPane(null)}>
           <section
@@ -1728,7 +863,7 @@ export default function App() {
                     groups.
                   </p>
                   <a
-                    href="https://github.com/d1manson/waveform"
+                    href="https://github.com/ChenNeuroscience/waveform"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -1740,24 +875,7 @@ export default function App() {
           </section>
         </div>
       )}
-    </div>
-  );
-}
-function Stat({
-  label,
-  value,
-  extra,
-}: {
-  label: string;
-  value: string;
-  extra?: string;
-}) {
-  return (
-    <div className="stat">
-      <span>{label}</span>
-      <b>{value}</b>
-      {extra && <small>{extra}</small>}
-    </div>
+    </DesktopShell>
   );
 }
 function Slider({

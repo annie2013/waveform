@@ -12,7 +12,7 @@ void main(){
  float x=axis(ax),y=axis(ay);gl_Position=vec4(x*1.86-.93,y*1.86-.93,0.,1.);gl_PointSize=size;
  bool hide=(isolate&&int(cell)!=selected)||time<range.x||time>range.y;
  vec3 rgb=cell==0u?vec3(.36,.42,.48):palette(float(cell));if(drift)rgb=mix(vec3(.22,.63,.96),vec3(.99,.58,.3),time);
- shade=vec4(rgb,hide?0.:opacity*(selected>=0&&int(cell)!=selected?.22:1.));
+ shade=vec4(rgb,hide?0.:opacity*(selected>=0&&int(cell)!=selected?.55:1.));
 }`;
 const fragment = `#version 300 es
 precision highp float;in vec4 shade;out vec4 outColor;void main(){if(shade.a==0.||distance(gl_PointCoord,vec2(.5))>.5)discard;outColor=shade;}`;
@@ -120,11 +120,11 @@ export class ClusterGPU {
     }
     gl.useProgram(this.p);
     gl.bindVertexArray(cached.vao);
-    gl.clearColor(0.039, 0.055, 0.071, 1);
+    gl.clearColor(1, 1, 1, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.SCISSOR_TEST);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, s.density ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const u = (n: string) => gl.getUniformLocation(this.p, n);
     gl.uniform1f(u("size"), s.pointSize * dpr);
     gl.uniform1f(u("opacity"), s.opacity);
@@ -212,7 +212,7 @@ export function drawWaves(
   gl.uniform1i(gl.getUniformLocation(p, "waves"), 0);
   gl.uniform3fv(gl.getUniformLocation(p, "rgb"), cellRgb(cell));
   gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clearColor(0.039, 0.055, 0.071, 1);
+  gl.clearColor(1, 1, 1, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -232,7 +232,11 @@ export function drawWaveOverview(
   cells: number[],
   columns: number,
 ) {
-  const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
+  const gl = canvas.getContext("webgl2", {
+    alpha: false,
+    antialias: false,
+    preserveDrawingBuffer: true,
+  });
   if (!gl) return () => {};
   const dpr = Math.min(2, devicePixelRatio || 1),
     rows = Math.ceil(cells.length / columns);
@@ -275,7 +279,7 @@ export function drawWaveOverview(
   );
   gl.uniform1i(gl.getUniformLocation(p, "width"), 4096);
   gl.uniform1i(gl.getUniformLocation(p, "waves"), 0);
-  gl.clearColor(0.039, 0.055, 0.071, 1);
+  gl.clearColor(1, 1, 1, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

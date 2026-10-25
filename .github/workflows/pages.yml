@@ -11,6 +11,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -27,7 +28,9 @@ jobs:
       - run: npm run test:rust
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # Ubuntu runners include Chromium's runtime libraries. Download the pinned
+      # headless browser without upgrading optional fonts through the apt mirror.
+      - run: npx playwright install --only-shell chromium
       - run: npm run test:e2e
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -38,7 +41,7 @@ jobs:
           name: browser-test-results
           path: test-results
   deploy:
-    if: github.event_name != 'pull_request' && github.repository == 'd1manson/waveform' && (github.ref == 'refs/heads/gh-pages' || github.ref == 'refs/heads/main')
+    if: github.event_name != 'pull_request' && github.repository == 'ChenNeuroscience/waveform' && (github.ref == 'refs/heads/gh-pages' || github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     permissions:

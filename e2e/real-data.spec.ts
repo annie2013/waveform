@@ -3,7 +3,7 @@ import { readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { readCut } from "../src/files";
+import { decodeCut as readCut } from "../tests/wasm";
 test("user sample: three trials and sixteen tetrodes load without cuts", async ({
   page,
 }) => {

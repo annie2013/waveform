@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseHeader, organiseFiles, readCut } from "../src/files";
-import { makePatch, applyPatch } from "../src/history";
+import { parseHeader, organiseFiles } from "../src/files";
+import { corePromise, decodeCut as readCut, seedEngine } from "./wasm";
 import { analyse } from "../src/position";
 import { defaultSettings } from "../src/types";
 describe("LTX import", () => {
@@ -76,52 +76,76 @@ describe("LTX import", () => {
     ]).toEqual([0, 1, 100]);
     await expect(
       readCut(new File(["Exact_cut_for: a spikes: 3\n0 1"], "a_1.cut"), 3),
-    ).rejects.toThrow("found 2");
+    ).rejects.toThrow("too few");
     await expect(
       readCut(new File(["Exact_cut_for: a spikes: 2\n0 1"], "a_1.cut"), 3),
     ).rejects.toThrow("tetrode");
   });
 });
 describe("undo delta integrity", () => {
-  it("restores sparse and dense patches byte-for-byte through undo and redo", () => {
+  it("restores sparse and dense Rust patches byte-for-byte", async () => {
+    const w = await corePromise;
     for (const n of [1, 3, 10000]) {
       const before = Uint16Array.from({ length: n }, (_, i) => i % 101),
-        after = before.slice();
+        after = before.slice(),
+        e = w.engine_new(n);
+      new Uint16Array(w.memory.buffer, w.engine_labels(e), n).set(before);
+      w.engine_edit_begin(e);
       for (let i = 0; i < n; i += n > 3 ? 100 : 1) after[i] = 99;
-      const patch = makePatch(before, after),
-        live = after.slice();
-      applyPatch(live, patch, false);
-      expect(live).toEqual(before);
-      applyPatch(live, patch, true);
-      expect(live).toEqual(after);
+      new Uint16Array(w.memory.buffer, w.engine_labels(e), n).set(after);
+      w.engine_edit_finish(e);
+      const bytes = new Uint8Array(
+          w.memory.buffer,
+          w.engine_patch(e),
+          w.engine_patch_len(e),
+        ).slice(),
+        p = w.alloc_bytes(bytes.length);
+      new Uint8Array(w.memory.buffer, p, bytes.length).set(bytes);
+      expect(w.engine_patch_apply(e, p, bytes.length, 0)).toBe(0);
+      expect(
+        new Uint16Array(w.memory.buffer, w.engine_labels(e), n).slice(),
+      ).toEqual(before);
+      expect(w.engine_patch_apply(e, p, bytes.length, 1)).toBe(0);
+      expect(
+        new Uint16Array(w.memory.buffer, w.engine_labels(e), n).slice(),
+      ).toEqual(after);
+      w.free_bytes(p, bytes.length);
+      w.engine_free(e);
     }
   });
 });
 describe("analysis", () => {
-  it("normalises spike counts by dwell time and excludes self from autocorrelation", () => {
-    const p = {
-      header: {},
-      time: new Float64Array([0, 1, 2, 3]),
-      x: new Float32Array([1, 1, 8, 8]),
-      y: new Float32Array([1, 1, 8, 8]),
-      dir: new Float32Array(4),
-      speed: new Float32Array(4),
-      width: 10,
-      height: 10,
-      sampleRate: 1,
-    };
-    const r = analyse(
-      new Uint32Array([100, 1100, 2100]),
-      new Uint16Array([1, 1, 1]),
+  it("normalises spikes by dwell time and excludes self from autocorrelation in Rust", async () => {
+    const w = await corePromise,
+      e = seedEngine(w, [100, 1100, 2100], [1, 1, 1]),
+      pos = w.position_new(4, 100, 1, 1, 0, 0, 10, 10),
+      raw = new Uint8Array(80),
+      d = new DataView(raw.buffer);
+    for (let i = 0; i < 4; i++) {
+      d.setUint32(i * 20, i);
+      d.setUint16(i * 20 + 4, i < 2 ? 1 : 8);
+      d.setUint16(i * 20 + 6, i < 2 ? 1 : 8);
+      d.setUint16(i * 20 + 12, 12);
+    }
+    const p = w.alloc_bytes(raw.length);
+    new Uint8Array(w.memory.buffer, p, raw.length).set(raw);
+    w.position_push(pos, p, raw.length);
+    w.free_bytes(p, raw.length);
+    w.position_finish(pos, 1, 0, 0);
+    const result = analyse(
+      w,
+      e,
       1,
       1000,
       3,
-      p,
+      { handle: pos, identity: "test", header: {} },
       { ...defaultSettings, binCm: 5, smooth: 0 },
     );
-    expect(r.spatial[0]).toBe(1);
-    expect(r.spatial[3]).toBe(0.5);
-    expect(r.ac.reduce((a, b) => a + b, 0)).toBe(0);
-    expect(r.rate).toBe(1);
+    expect(result.spatial[0]).toBe(1);
+    expect(result.spatial[3]).toBe(0.5);
+    expect(result.ac.reduce((a, b) => a + b, 0)).toBe(0);
+    expect(result.rate).toBe(1);
+    w.position_free(pos);
+    w.engine_free(e);
   });
 });

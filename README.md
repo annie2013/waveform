@@ -51,7 +51,7 @@ Undo patches are saved to IndexedDB, with no fixed action limit. History metadat
 
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) installs Node/Rust, runs Rust/unit/browser checks, builds Wasm + React, uploads `dist/`, and deploys after a push to the upstream `gh-pages` or `main` branch. Pull requests and forks build without deploying to the upstream site.
 
-A repository administrator must select **Settings → Pages → Build and deployment → Source: GitHub Actions** once. The deployment then serves `https://d1manson.github.io/waveform/`. Relative assets and an absolute worker-initialisation URL support the `/waveform/` subpath. No COOP/COEP headers or SharedArrayBuffer are required.
+A repository administrator must select **Settings → Pages → Build and deployment → Source: GitHub Actions** once. The deployment then serves `https://ChenNeuroscience.github.io/waveform/`. Relative assets and an absolute worker-initialisation URL support the `/waveform/` subpath. No COOP/COEP headers or SharedArrayBuffer are required.
 
 GitHub documents the [custom Pages workflow and required deployment permissions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages); Vite documents [static deployment](https://vite.dev/guide/static-deploy.html).
 

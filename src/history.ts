@@ -1,32 +1,4 @@
-export interface Patch {
-  kind: "sparse" | "dense";
-  before: Uint16Array;
-  after: Uint16Array;
-  indices?: Uint32Array;
-}
-export function makePatch(before: Uint16Array, after: Uint16Array): Patch {
-  let count = 0;
-  for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) count++;
-  if (count * 8 >= before.byteLength * 2)
-    return { kind: "dense", before, after: after.slice() };
-  const indices = new Uint32Array(count),
-    a = new Uint16Array(count),
-    b = new Uint16Array(count);
-  let j = 0;
-  for (let i = 0; i < before.length; i++)
-    if (before[i] !== after[i]) {
-      indices[j] = i;
-      a[j] = before[i];
-      b[j++] = after[i];
-    }
-  return { kind: "sparse", indices, before: a, after: b };
-}
-export function applyPatch(labels: Uint16Array, p: Patch, redo: boolean) {
-  const values = redo ? p.after : p.before;
-  if (p.kind === "dense") labels.set(values);
-  else
-    for (let j = 0; j < values.length; j++) labels[p.indices![j]] = values[j];
-}
+// IndexedDB adapter only. Patch generation and application are Rust operations.
 export async function openStore(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open("waveform-v2", 1);

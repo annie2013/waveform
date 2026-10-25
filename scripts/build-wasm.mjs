@@ -18,3 +18,8 @@ await copyFile(
   "core/target/wasm32-unknown-unknown/release/waveform_core.wasm",
   "public/wasm/waveform_core.wasm",
 );
+await mkdir("src/generated", { recursive: true });
+await copyFile(
+  "core/target/wasm32-unknown-unknown/release/waveform_core.wasm",
+  "src/generated/waveform_core.wasm",
+);

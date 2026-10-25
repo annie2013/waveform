@@ -1,11 +1,12 @@
 import type { ViewData } from "./types";
+import wasmUrl from "./generated/waveform_core.wasm?url";
 const worker = new Worker(new URL("./engine.worker.ts", import.meta.url), {
   type: "module",
 });
 worker.postMessage({
   id: 0,
   type: "init",
-  url: new URL("wasm/waveform_core.wasm", document.baseURI).href,
+  url: new URL(wasmUrl, document.baseURI).href,
 });
 let id = 0;
 const pending = new Map<

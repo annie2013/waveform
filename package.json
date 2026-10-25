@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
@@ -24,7 +25,7 @@
     "build:wasm": "node scripts/build-wasm.mjs",
     "build": "npm run build:wasm && tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "vitest run",
+    "test": "npm run build:wasm && vitest run",
     "test:rust": "cargo test --manifest-path core/Cargo.toml",
     "bench": "node scripts/benchmark.mjs",
     "test:e2e": "playwright test"
