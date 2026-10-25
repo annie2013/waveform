@@ -194,7 +194,9 @@ export default function App() {
       "load",
       {
         file: tet.file,
+        assetKey: `${tet.id}|${fileId(tet.file)}`,
         cut: cut?.file,
+        cutKey: cut?.id,
         set: trial?.set,
         pos: trial?.pos,
         budget: settings.budget,
@@ -234,6 +236,7 @@ export default function App() {
           session: data.session,
           cell,
           pos: trial?.pos,
+          posKey: trial?.pos ? `${trial.id}|${fileId(trial.pos)}` : "",
           settings,
         })
           .then((a) => {
@@ -403,7 +406,14 @@ export default function App() {
         file = new File([blob], `${trial!.name}_${tetNum} edited.cut`, {
           lastModified: Date.now(),
         }),
-        result = await organiseFiles([file], trials);
+        result = await organiseFiles(
+          [
+            Object.defineProperty(file, "webkitRelativePath", {
+              value: trial!.folder ? `${trial!.folder}/${file.name}` : "",
+            }),
+          ],
+          trials,
+        );
       setTrials(result.trials);
       setCutId(fileId(file));
       setNotice("Created a cut copy. Each version keeps its own edit history.");

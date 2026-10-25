@@ -8,8 +8,8 @@ Local verification on 25 October 2026, macOS arm64, Node 24.14.0, stable Rust, C
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Production Rust/Wasm + TypeScript + Vite build  | Passed; Wasm module about 39 KB, app JS about 283 KB before gzip                                                                                  |
 | Rust tests                                      | 4 passed: signed sample/endian decoding, exact polygon/swap, waveform gate/brush/renumber, 9-million-label count integrity                        |
-| TypeScript unit tests                           | 5 passed: header/binary boundary, incremental file grouping, cut/CLu validation, sparse/dense undo identity, occupancy and autocorrelation sanity |
-| Chromium browser tests                          | 5 passed, including two optional local data tests                                                                                                 |
+| TypeScript unit tests                           | 6 passed: header/binary boundary, incremental file grouping, cut/CLu validation, sparse/dense undo identity, occupancy and autocorrelation sanity |
+| Chromium browser tests                          | 6 passed, including two optional local data tests                                                                                                 |
 | Dependency audit after updating the test runner | Zero reported vulnerabilities                                                                                                                     |
 | Git diff whitespace check                       | Passed                                                                                                                                            |
 
@@ -20,6 +20,7 @@ Browser scenarios:
 3. Synthetic demo: merge, waveform split, undo/redo, switch away and back, waveform overview, settings, direction view, pinned comparison, cut duplication and cut export.
 4. Serve the production build from an actual `/waveform/` static mount and load the demo, worker and Wasm module successfully.
 5. Verify the 390-pixel mobile welcome screen fits the viewport.
+6. Import two folders with identical trial/tetrode/cut basenames and timestamps. Verify separate assignments, undo histories, and cut duplication without creating a spurious trial.
 
 ## Timings observed
 

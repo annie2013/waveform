@@ -35,7 +35,12 @@ export async function organiseFiles(
   files: File[],
   previous: Trial[] = [],
 ): Promise<{ trials: Trial[]; ignored: string[] }> {
-  const trials = structuredClone(previous),
+  // File objects are immutable. Preserve their references and relative paths while
+  // cloning only the mutable organiser containers (custom paths do not clone).
+  const trials = previous.map((t) => ({
+      ...t,
+      tetrodes: t.tetrodes.map((e) => ({ ...e, cuts: [...e.cuts] })),
+    })),
     map = new Map(trials.map((t) => [t.id, t]));
   const ignored: string[] = [],
     cuts: File[] = [];
@@ -103,7 +108,16 @@ export async function organiseFiles(
       ignored.push(`${f.name} (cannot identify trial/tetrode)`);
       continue;
     }
-    const target = tet(ensure(base, folder), n),
+    const candidates = trials.filter((t) => t.name === base);
+    if (!folder && !map.has(`/${base}`) && candidates.length > 1) {
+      ignored.push(`${f.name} (ambiguous trial; import with its folder)`);
+      continue;
+    }
+    const owner =
+      !folder && !map.has(`/${base}`) && candidates.length === 1
+        ? candidates[0]
+        : ensure(base, folder);
+    const target = tet(owner, n),
       id = fileId(f);
     if (!target.cuts.some((c) => c.id === id))
       target.cuts.push({ id, file: f, name: f.name });

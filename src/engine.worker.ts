@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 import { parseHeader, textHeader, readCut } from "./files";
 import {
-  fileId,
   type Settings,
   type Header,
   type HistoryEntry,
@@ -18,6 +17,7 @@ import {
 } from "./history";
 type Wasm = { memory: WebAssembly.Memory; [key: string]: any };
 interface Asset {
+  key: string;
   wasm: Wasm;
   e: number;
   n: number;
@@ -89,8 +89,8 @@ async function loadAsset(
   file: File,
   cut: File | undefined,
   id: number,
+  key: string,
 ): Promise<Asset> {
-  const key = fileId(file);
   let a = assets.get(key);
   if (a) {
     a.last = performance.now();
@@ -130,6 +130,7 @@ async function loadAsset(
     wasm = instance.exports as Wasm,
     e = wasm.engine_new(n);
   a = {
+    key,
     wasm,
     e,
     n,
@@ -248,7 +249,7 @@ function view(
   const wl = new Uint16Array(a.waveIndices.length);
   for (let i = 0; i < wl.length; i++) wl[i] = full[a.waveIndices[i]];
   return {
-    key: fileId(a.file),
+    key: a.key,
     session: s.key,
     name: a.file.name,
     n: a.n,
@@ -364,11 +365,11 @@ async function handle(m: any): Promise<any> {
   if (m.type === "load") {
     await saveActive();
     const file = m.file as File,
-      key = fileId(file),
-      sessionKey = `${key}|${m.cut ? fileId(m.cut) : "unsorted"}`,
+      key = m.assetKey as string,
+      sessionKey = `${key}|${m.cut ? m.cutKey : "unsorted"}`,
       cached = assets.has(key);
     budget = m.budget;
-    const a = await loadAsset(file, m.cut, m.id);
+    const a = await loadAsset(file, m.cut, m.id, key);
     let s = sessions.get(sessionKey);
     if (!s) {
       s = {
@@ -549,7 +550,7 @@ async function handle(m: any): Promise<any> {
   if (m.type === "analysis") {
     const opts = m.settings as Settings,
       pk = m.pos
-        ? `${fileId(m.pos)}|${opts.leds}|${opts.maxSpeed}|${opts.posSmooth}`
+        ? `${m.posKey}|${opts.leds}|${opts.maxSpeed}|${opts.posSmooth}`
         : "";
     let pos = positions.get(pk);
     if (m.pos && !pos) {

@@ -4,6 +4,33 @@ import { makePatch, applyPatch } from "../src/history";
 import { analyse } from "../src/position";
 import { defaultSettings } from "../src/types";
 describe("LTX import", () => {
+  it("keeps folder-scoped File identities across incremental imports", async () => {
+    const f = (path: string, text = "") => {
+      const file = new File([text], path.split("/").at(-1)!, {
+        lastModified: 1,
+      });
+      Object.defineProperty(file, "webkitRelativePath", { value: path });
+      return file;
+    };
+    const a = f("a/trial.1"),
+      b = f("b/trial.1");
+    const first = await organiseFiles([a, b]);
+    const next = await organiseFiles(
+      [f("b/trial_1.cut", "Exact_cut_for: trial spikes: 1\n2")],
+      first.trials,
+    );
+    expect(next.trials).toHaveLength(2);
+    expect(next.trials[0].tetrodes[0].file).toBe(a);
+    expect(next.trials[1].tetrodes[0].file).toBe(b);
+    expect(next.trials[0].tetrodes[0].cuts).toHaveLength(0);
+    expect(next.trials[1].tetrodes[0].cuts).toHaveLength(1);
+    const ambiguous = await organiseFiles(
+      [new File(["Exact_cut_for: trial spikes: 1\n1"], "trial_1.cut")],
+      next.trials,
+    );
+    expect(ambiguous.ignored[0]).toContain("ambiguous");
+    expect(ambiguous.trials).toHaveLength(2);
+  });
   it("keeps the first binary byte, including newline-valued timestamps", () => {
     const h = new TextEncoder().encode("num_spikes 1\r\ndata_start");
     const bytes = new Uint8Array(h.length + 5);
